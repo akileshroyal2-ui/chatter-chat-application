@@ -2,7 +2,7 @@
 
 A responsive, WhatsApp-inspired chat dashboard and college OOAD project. Open `index.html` in a modern browser to explore the interactive front-end demo.
 
-> **Project/demo website:** the runnable website is [`index.html`](./index.html). This static demo runs on your device; it is not a publicly hosted website and does not connect users across devices. A production launch requires hosting and the backend described below.
+> **Project/demo website:** [Open Chatter](https://akileshroyal2-ui.github.io/chatter-chat-application/). This static demo runs in your browser and does not connect users across devices. A production launch requires the backend described below.
 
 ## Problem statement
 
@@ -20,17 +20,17 @@ People need a convenient way to communicate privately, find one another, exchang
 
 ### Included in this runnable demo
 
-The dashboard includes sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, demo voice/video call screens, locally generated AI writing suggestions and chat summaries, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`.
+The dashboard includes a demo sign-in and profile-creation screen with email and phone fields, sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, demo voice/video call screens, locally generated AI writing suggestions and chat summaries, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`; the demo sign-in state is limited to the current browser tab.
 
 ### Not provided by this static demo
 
-There is no live account registration or password verification, network connection, cross-device presence, real-time delivery between two people, MongoDB service, end-to-end encryption, server-side file storage, connected microphone/camera call, or external AI integration. Calls are visual UI demos and do not request device permissions. AI summaries and reply drafts are generated locally with simple demo rules; no messages are transmitted to an AI provider. The “private conversation” copy is a UI label, not a claim that the demo implements encryption. Use the architecture, algorithms, and integration notes in this document to build the production service; never treat client-side storage or simulated login as secure authentication.
+The sign-in and registration screens only validate input format. They do not verify email, phone, password, or account identity; passwords are never stored or sent, and profile creation only saves profile details locally. Do not enter a real password. This is not secure authentication or a real online account. There is no network connection, cross-device presence, real-time delivery between two people, MongoDB service, end-to-end encryption, server-side file storage, connected microphone/camera call, or external AI integration. Calls are visual UI demos and do not request device permissions. AI summaries and reply drafts are generated locally with simple demo rules; no messages are transmitted to an AI provider. The “private conversation” copy is a UI label, not a claim that the demo implements encryption. Use the architecture, algorithms, and integration notes in this document to build the production service; never treat client-side storage or simulated login as secure authentication.
 
 ## Requirements
 
 ### Functional
 
-1. Register an account and securely log in.
+1. Demonstrate registration and sign-in input flow (format checks only; secure registration and login require the production backend).
 2. View and edit profile information and preferences.
 3. Search for contacts and start a one-to-one conversation.
 4. Send and receive text messages in real time.
@@ -426,9 +426,10 @@ getHistory(session, chatId, before, pageSize):
 
 1. Download or clone the project files.
 2. Open `index.html` in a modern browser, or serve this directory with any static web server.
-3. Try searching **Sophie**, switching the **Unread** filter, starting a chat with a new contact, sending a message, editing your profile, changing the theme in Settings, blocking a contact from their profile, opening the AI writing tools from the composer, trying a demo voice/video call, and attaching a file.
+3. Sign in with any well-formed email or phone and an 8+ character demo password, create a demo profile, or choose **Continue with sample account**. The password is not verified or saved.
+4. Try searching **Sophie**, switching the **Unread** filter, starting a chat with a new contact, sending a message, editing your profile, changing the theme in Settings, blocking a contact from their profile, opening the AI writing tools from the composer, trying a demo voice/video call, and attaching a file.
 
-No website URL has been deployed. To create a shareable public website link, deploy this frontend to a static host (for example GitHub Pages or Netlify); deploying real multi-user chat additionally requires the production API, real-time service, database, private file storage, and HTTPS/WSS described above.
+The public demo link above serves the static frontend. Deploying real multi-user chat additionally requires the production API, real-time service, database, private file storage, and HTTPS/WSS described above.
 
 ## Testing plan and sample test cases
 
@@ -436,7 +437,7 @@ Run the manual checks in a current desktop and mobile browser. Verify persistenc
 
 | ID | Test | Expected result |
 | --- | --- | --- |
-| T01 | Open `index.html` | Dashboard loads with sample chats and an active Sophie conversation. |
+| T01 | Open `index.html` and continue with the sample account | Dashboard loads with sample chats and an active Sophie conversation. |
 | T02 | Search for `Marcus` | Matching conversation remains; unrelated chats are hidden. |
 | T03 | Choose **Unread** | Only conversations with unread messages are displayed. |
 | T04 | Select an unread conversation | It opens and its unread badge clears. |
@@ -458,6 +459,11 @@ Run the manual checks in a current desktop and mobile browser. Verify persistenc
 | T20 | Try to call an offline or blocked contact | The demo explains why it cannot start the call. |
 | T21 | Open AI tools, summarize a chat, and request a reply draft | Recent messages are summarized locally, or an editable reply draft is added to the composer without being sent. |
 | T22 | Open New chat | The contact picker shows all twelve sample contacts; selecting one starts a conversation. |
+| T23 | Create a demo profile with valid name, email, phone, and matching password fields | Dashboard opens; email and phone appear in the editable profile; no password is saved. |
+| T24 | Submit a malformed email, invalid phone, short password, or mismatching confirmation | The form displays a validation error and does not open the dashboard. |
+| T25 | Sign in with a valid-format email or international phone number and an 8+ character demo password | Dashboard opens; the provided email or phone is saved as local profile data; password remains transient and is not verified. |
+| T26 | Sign out, then refresh the same browser tab | Sign-in screen appears; reloading does not restore the demo session. |
+| T27 | Edit a profile email or phone to an invalid value | The profile is not saved and the browser shows a validation message. |
 
 ## Expected output
 

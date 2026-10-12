@@ -1,13 +1,14 @@
 "use strict";
 
 const STORAGE_KEY = "chatter.project.v1";
+const AUTH_SESSION_KEY = "chatter.demo-session.v1";
 const svg = (name) => `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
 const seed = {
-  profile: { id: "jordan", name: "Jordan Davis", username: "@jordan.d", about: "Collecting moments, not things ✨", initials: "JD" },
+  profile: { id: "jordan", name: "Jordan Davis", username: "@jordan.d", email: "", phone: "", about: "Collecting moments, not things ✨", initials: "JD" },
   contacts: [
     { id: "sophie", name: "Sophie Chen", username: "@sophie.chen", about: "slow mornings & strong coffee", color: "#cfddd0", initials: "SC", status: "Online", favorite: true },
     { id: "marcus", name: "Marcus Rivera", username: "@marcus.r", about: "probably looking for my keys 🗝", color: "#e4cdb5", initials: "MR", status: "Online", favorite: true },
@@ -83,7 +84,7 @@ let state = loadState();
 let currentFilter = state.filter || "all";
 let searchQuery = "";
 let typingTimeout;
-let demoSessionActive = true;
+let demoSessionActive = readDemoSession();
 let activeCallInterval;
 let activeCallStartedAt;
 
@@ -93,6 +94,27 @@ function applyTheme(theme) {
 }
 
 applyTheme(state.settings.theme);
+
+function readDemoSession() {
+  try { return sessionStorage.getItem(AUTH_SESSION_KEY) === "active"; }
+  catch (error) {
+    console.error("Could not read this tab's demo sign-in state.", error);
+    return false;
+  }
+}
+
+function setDemoSession(active) {
+  demoSessionActive = active;
+  try {
+    if (active) sessionStorage.setItem(AUTH_SESSION_KEY, "active");
+    else sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch (error) {
+    console.error("Could not update this tab's demo sign-in state.", error);
+    showToast("Your browser couldn't save the demo session. You can still use the chat in this tab.");
+  }
+  document.body.classList.toggle("demo-authenticated", active);
+  document.getElementById("auth-screen").hidden = active;
+}
 
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -447,14 +469,114 @@ function closeModal() {
   document.getElementById("modal-root").innerHTML = "";
 }
 
-function showSignedOutScreen() {
-  document.getElementById("modal-root").innerHTML = `
-    <div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="signed-out-title">
-      <div class="modal-heading" id="signed-out-title">You're signed out</div>
-      <p class="signed-out-message">Account registration and secure sign-in need the backend service described in the project guide. This front-end prototype stores no login credentials.</p>
-      <div class="modal-actions"><button class="button-primary" data-action="continue-demo">Continue with sample account</button></div>
-    </section></div>`;
-  document.querySelector('[data-action="continue-demo"]').focus();
+function renderAuthScreen(mode = "login", errorMessage = "") {
+  const registering = mode === "register";
+  const screen = document.getElementById("auth-screen");
+  screen.innerHTML = `
+    <div class="auth-layout">
+      <section class="auth-story">
+        <a class="auth-brand" href="#" aria-label="Chatter home"><span class="auth-brand-mark">${svg("chat")}</span><span>chatter<span class="auth-brand-period">.</span></span></a>
+        <div class="auth-story-copy">
+          <span class="auth-kicker"><span class="live-dot"></span> A LITTLE CLOSER, EVERY DAY</span>
+          <h1>Good things<br>are <span>better shared.</span></h1>
+          <p>A cozy corner for your people. Pick up where you left off, share a little moment, and make someone's day.</p>
+          <div class="auth-story-art" aria-hidden="true"><span class="auth-orbit orbit-one"></span><span class="auth-orbit orbit-two"></span><span class="auth-art-spark">✳</span><span class="auth-art-chat">${svg("chat")}</span><span class="auth-art-caption">a note from your favorite person</span><span class="auth-art-message">“we should make this a little tradition 🌿”</span><span class="auth-art-avatar">SC</span></div>
+        </div>
+        <div class="auth-story-footer"><span>Made for the little things.</span><span>✳ &nbsp;Say hello, stay awhile.</span></div>
+      </section>
+      <section class="auth-form-side">
+        <div class="auth-form-wrap">
+          <div class="auth-mobile-brand"><span class="auth-brand-mark">${svg("chat")}</span><span>chatter<span class="auth-brand-period">.</span></span></div>
+          <div class="auth-form-heading"><div class="auth-form-eyebrow">${registering ? "YOUR PEOPLE ARE JUST A MOMENT AWAY" : "YOUR LITTLE CORNER IS WAITING"}</div>
+            <h2>${registering ? "Create your account" : "Welcome back"}</h2>
+            <p>${registering ? "A name, an email, and your phone — then you're home." : "Sign in with your email or phone number to pick up where you left off."}</p>
+          </div>
+          <div class="auth-mode-tabs" role="tablist" aria-label="Account access">
+            <button type="button" data-auth-mode="login" class="${registering ? "" : "selected"}" role="tab" aria-selected="${!registering}">Sign in</button>
+            <button type="button" data-auth-mode="register" class="${registering ? "selected" : ""}" role="tab" aria-selected="${registering}">Create account</button>
+          </div>
+          <form id="auth-form" data-auth-kind="${registering ? "register" : "login"}" novalidate>
+            ${errorMessage ? `<div class="auth-error" role="alert">${escapeHtml(errorMessage)}</div>` : ""}
+            ${registering ? `<div class="field-group"><label class="field-label" for="auth-name">Your name</label><input class="field-input auth-input" id="auth-name" name="name" type="text" autocomplete="name" minlength="2" maxlength="50" placeholder="What should we call you?" required></div>` : ""}
+            ${registering
+              ? `<div class="field-group"><label class="field-label" for="auth-email">Email address</label><input class="field-input auth-input" id="auth-email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></div>
+                 <div class="field-group"><label class="field-label" for="auth-phone">Phone number</label><input class="field-input auth-input" id="auth-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="24" placeholder="+1 555 123 4567" required><span class="field-help">Include your country code, for example +1.</span></div>`
+              : `<div class="field-group"><label class="field-label" for="auth-identifier">Email or phone number</label><input class="field-input auth-input" id="auth-identifier" name="identifier" type="text" autocomplete="username" maxlength="254" placeholder="you@example.com or +1 555 123 4567" required></div>`}
+            <div class="field-group"><label class="field-label" for="auth-password">Password</label><input class="field-input auth-input" id="auth-password" name="password" type="password" autocomplete="${registering ? "new-password" : "current-password"}" minlength="8" maxlength="128" placeholder="At least 8 characters" required></div>
+            ${registering ? `<div class="field-group"><label class="field-label" for="auth-confirm-password">Confirm password</label><input class="field-input auth-input" id="auth-confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Type your password again" required></div>` : ""}
+            <button class="auth-submit" type="submit">${registering ? "Create my demo profile" : "Sign in to Chatter"}<span>→</span></button>
+          </form>
+          <div class="auth-demo-note"><span class="auth-note-icon">✳</span><span><strong>Frontend demo only</strong>Your password is checked for format but never saved or sent. Email and phone are not verified. Don't use a real password here.</span></div>
+          <button class="auth-guest-button" type="button" data-action="continue-demo">Continue with sample account</button>
+          <div class="auth-form-footer">By continuing, you're trying a local prototype — not creating a verified online account.</div>
+        </div>
+      </section>
+    </div>`;
+  screen.hidden = demoSessionActive;
+  document.body.classList.toggle("demo-authenticated", demoSessionActive);
+  const firstField = screen.querySelector("#auth-name, #auth-identifier");
+  if (firstField) firstField.focus({ preventScroll: true });
+}
+
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return phone.trim().replace(/[\s().-]/g, "");
+}
+
+function completeDemoLogin(profilePatch = {}) {
+  state.profile = { ...state.profile, ...profilePatch };
+  if (state.profile.name) state.profile.initials = initialsFor(state.profile.name);
+  saveState();
+  setDemoSession(true);
+  closeModal();
+  renderApp();
+  showToast("You're in. Welcome to your little corner ✨");
+}
+
+function submitAuthForm(form) {
+  const kind = form.dataset.authKind;
+  const password = form.elements.password.value;
+  if (password.length < 8) {
+    renderAuthScreen(kind, "Use a demo password with at least 8 characters.");
+    return;
+  }
+
+  if (kind === "register") {
+    const name = form.elements.name.value.trim();
+    const email = normalizeEmail(form.elements.email.value);
+    const phone = normalizePhone(form.elements.phone.value);
+    if (name.length < 2) {
+      renderAuthScreen(kind, "Please enter a name with at least 2 characters.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      renderAuthScreen(kind, "Enter a valid email address.");
+      return;
+    }
+    if (!/^\+?\d{7,15}$/.test(phone)) {
+      renderAuthScreen(kind, "Enter a valid phone number with country code and 7–15 digits.");
+      return;
+    }
+    if (password !== form.elements.confirmPassword.value) {
+      renderAuthScreen(kind, "Your passwords don't match.");
+      return;
+    }
+    completeDemoLogin({ name, email, phone, username: `@${name.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "")}` });
+    return;
+  }
+
+  const identifier = form.elements.identifier.value.trim();
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+  const phone = normalizePhone(identifier);
+  if (!isEmail && !/^\+?\d{7,15}$/.test(phone)) {
+    renderAuthScreen("login", "Enter a valid email address or phone number with country code.");
+    return;
+  }
+  const profilePatch = isEmail ? { email: normalizeEmail(identifier) } : { phone };
+  completeDemoLogin(profilePatch);
 }
 
 function openNewChat() {
@@ -474,6 +596,8 @@ function openProfileSettings() {
   const contents = `
     <div class="settings-section-label">YOUR PROFILE</div>
     <div class="field-group"><label class="field-label" for="profile-name">Your name</label><input class="field-input" id="profile-name" maxlength="50" value="${escapeHtml(profile.name)}" required></div>
+    <div class="field-group"><label class="field-label" for="profile-email">Email address</label><input class="field-input" id="profile-email" type="email" maxlength="254" autocomplete="email" value="${escapeHtml(profile.email || "")}" placeholder="you@example.com"></div>
+    <div class="field-group"><label class="field-label" for="profile-phone">Phone number</label><input class="field-input" id="profile-phone" type="tel" maxlength="24" autocomplete="tel" value="${escapeHtml(profile.phone || "")}" placeholder="+1 555 123 4567"></div>
     <div class="field-group"><label class="field-label" for="profile-username">Username</label><input class="field-input" id="profile-username" maxlength="30" value="${escapeHtml(profile.username)}"></div>
     <div class="field-group"><label class="field-label" for="profile-about">A little about you</label><textarea class="field-input" id="profile-about" maxlength="140">${escapeHtml(profile.about)}</textarea></div>
     <div class="settings-section-label settings-section-spaced">APPEARANCE</div>
@@ -628,8 +752,12 @@ function handleFiles(fileList) {
 }
 
 document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting], [data-theme-choice], [data-unblock-contact]");
+  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting], [data-theme-choice], [data-unblock-contact], [data-auth-mode]");
   if (!target) return;
+  if (target.dataset.authMode) {
+    renderAuthScreen(target.dataset.authMode);
+    return;
+  }
   if (target.dataset.themeChoice) {
     state.settings.theme = target.dataset.themeChoice;
     applyTheme(state.settings.theme);
@@ -730,18 +858,41 @@ document.addEventListener("click", (event) => {
     case "back": document.querySelector(".app-shell").classList.remove("mobile-chat-open"); break;
     case "close-modal": closeModal(); break;
     case "backdrop": if (event.target === target) closeModal(); break;
-    case "logout": demoSessionActive = false; showSignedOutScreen(); break;
-    case "continue-demo": demoSessionActive = true; closeModal(); showToast("Welcome back to the sample account ✨"); break;
+    case "logout":
+      closeModal();
+      setDemoSession(false);
+      renderAuthScreen("login");
+      break;
+    case "continue-demo":
+      completeDemoLogin();
+      break;
     case "save-profile": {
-      const name = document.getElementById("profile-name").value.trim();
+      const nameField = document.getElementById("profile-name");
+      const emailField = document.getElementById("profile-email");
+      const phoneField = document.getElementById("profile-phone");
+      const name = nameField.value.trim();
       const username = document.getElementById("profile-username").value.trim();
+      const email = normalizeEmail(emailField.value);
+      const phoneInput = phoneField.value.trim();
+      const phone = phoneInput ? normalizePhone(phoneInput) : "";
       const about = document.getElementById("profile-about").value.trim();
-      if (name.length < 2) { document.getElementById("profile-name").setCustomValidity("Please enter a name with at least 2 characters."); document.getElementById("profile-name").reportValidity(); return; }
-      state.profile = { ...state.profile, name, username: username.startsWith("@") || !username ? username : `@${username}`, about, initials: initialsFor(name) };
+      nameField.setCustomValidity("");
+      emailField.setCustomValidity("");
+      phoneField.setCustomValidity("");
+      if (name.length < 2) { nameField.setCustomValidity("Please enter a name with at least 2 characters."); nameField.reportValidity(); return; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { emailField.setCustomValidity("Enter a valid email address."); emailField.reportValidity(); return; }
+      if (phone && !/^\+?\d{7,15}$/.test(phone)) { phoneField.setCustomValidity("Enter a valid phone number with 7–15 digits."); phoneField.reportValidity(); return; }
+      state.profile = { ...state.profile, name, email, phone, username: username.startsWith("@") || !username ? username : `@${username}`, about, initials: initialsFor(name) };
       saveState(); closeModal(); renderApp(); showToast("Your profile feels a little more like you now.");
       break;
     }
   }
+});
+
+document.addEventListener("submit", (event) => {
+  if (event.target.id !== "auth-form") return;
+  event.preventDefault();
+  submitAuthForm(event.target);
 });
 
 document.getElementById("message-form").addEventListener("submit", (event) => {
@@ -789,4 +940,10 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && demoSessionActive) closeModal();
 });
 
-renderApp();
+if (demoSessionActive) {
+  setDemoSession(true);
+  renderApp();
+} else {
+  setDemoSession(false);
+  renderAuthScreen("login");
+}
