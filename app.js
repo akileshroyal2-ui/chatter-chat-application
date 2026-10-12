@@ -93,6 +93,7 @@ let activeRecorderChunks = [];
 let voiceRecordingStartedAt = 0;
 let voiceRecordingTimer;
 let discardVoiceRecording = false;
+let voiceRequestId = 0;
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -662,12 +663,13 @@ function startVoiceMessage() {
     return;
   }
   discardVoiceRecording = false;
+  const requestId = ++voiceRequestId;
   openModal("Record a voice message", "Your browser will ask for microphone access. This demo keeps the recording in this browser.", `
     <div class="voice-recorder-panel"><span class="voice-recorder-mic">${svg("mic")}</span><strong id="voice-recording-state">Getting your microphone…</strong><span id="voice-recording-time">00:00 / 01:00</span></div>
     <div class="voice-recorder-actions"><button class="button-secondary" data-action="voice-cancel">Cancel</button><button class="button-primary" id="voice-record-stop" data-action="voice-stop" disabled>Stop & send</button></div>
     <div class="ai-disclaimer">Recording is optional. Audio is stored only in this browser's demo chat history.</div>`);
   navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-    if (!document.getElementById("voice-record-stop")) {
+    if (requestId !== voiceRequestId || !document.getElementById("voice-record-stop")) {
       stream.getTracks().forEach((track) => track.stop());
       return;
     }
@@ -704,7 +706,7 @@ function startVoiceMessage() {
       if (elapsed >= 60) stopVoiceRecording();
     }, 250);
   }).catch((error) => {
-    if (!document.getElementById("voice-record-stop")) return;
+    if (requestId !== voiceRequestId || !document.getElementById("voice-record-stop")) return;
     console.error("Could not access the microphone for a voice message.", error);
     closeModal();
     showToast(error.name === "NotAllowedError" || error.name === "PermissionDeniedError"
@@ -724,6 +726,7 @@ function stopVoiceRecording() {
 }
 
 function cancelVoiceRecording() {
+  voiceRequestId += 1;
   discardVoiceRecording = true;
   window.clearInterval(voiceRecordingTimer);
   voiceRecordingTimer = undefined;
