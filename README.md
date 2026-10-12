@@ -20,7 +20,7 @@ People need a convenient way to communicate privately, find one another, exchang
 
 ### Included in this runnable demo
 
-The dashboard includes sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`.
+The dashboard includes sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`.
 
 ### Not provided by this static demo
 
@@ -39,6 +39,7 @@ There is no live account registration or password verification, network connecti
 7. Retrieve conversation history and shared files.
 8. Log out, expire sessions, and protect authenticated routes.
 9. Attach and download files with size/type validation.
+10. Personalize the interface with a persistent light or dark theme and block/unblock contacts.
 
 ### Non-functional
 
@@ -425,7 +426,7 @@ getHistory(session, chatId, before, pageSize):
 
 1. Download or clone the project files.
 2. Open `index.html` in a modern browser, or serve this directory with any static web server.
-3. Try searching **Sophie**, switching the **Unread** filter, starting a chat with another contact, sending a message, editing your profile, and attaching a file.
+3. Try searching **Sophie**, switching the **Unread** filter, starting a chat with another contact, sending a message, editing your profile, changing the theme in Settings, blocking a contact from their profile, and attaching a file.
 
 No website URL has been deployed. To create a shareable public website link, deploy this frontend to a static host (for example GitHub Pages or Netlify); deploying real multi-user chat additionally requires the production API, real-time service, database, private file storage, and HTTPS/WSS described above.
 
@@ -450,6 +451,9 @@ Run the manual checks in a current desktop and mobile browser. Verify persistenc
 | T13 | Production-only: request another user's chat history | Server rejects unauthorized access without returning message contents. |
 | T14 | Production-only: recipient acknowledges a persisted message | Message transitions to `DELIVERED` once; sender receives one status event. |
 | T15 | Production-only: expired/revoked session opens a socket | Connection is rejected and protected history is unavailable. |
+| T16 | Choose Dark under Settings → Appearance, then refresh | Dark theme remains active in the same browser. |
+| T17 | Block a contact from their profile and try sending a message or file | Confirmation is required; chat shows a blocked banner and sending/sharing controls are hidden. |
+| T18 | Unblock the contact from the profile or Settings → Blocked contacts | The conversation controls return and the contact is removed from the blocked list. |
 
 ## Expected output
 

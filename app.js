@@ -41,7 +41,8 @@ const seed = {
   ],
   activeId: "sophie",
   filter: "all",
-  settings: { notifications: true, readReceipts: true }
+  blockedContactIds: [],
+  settings: { notifications: true, readReceipts: true, theme: "light" }
 };
 
 function loadState() {
@@ -52,7 +53,12 @@ function loadState() {
     if (!parsed.profile || !Array.isArray(parsed.contacts) || !Array.isArray(parsed.conversations)) {
       throw new Error("Saved chat data has an invalid format.");
     }
-    return { ...structuredClone(seed), ...parsed, settings: { ...seed.settings, ...parsed.settings } };
+    const restored = { ...structuredClone(seed), ...parsed, settings: { ...seed.settings, ...parsed.settings } };
+    restored.blockedContactIds = Array.isArray(parsed.blockedContactIds)
+      ? parsed.blockedContactIds.filter((id) => restored.contacts.some((contact) => contact.id === id))
+      : [];
+    restored.settings.theme = restored.settings.theme === "dark" ? "dark" : "light";
+    return restored;
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof TypeError) {
       console.error("Could not load saved chat data.", error);
@@ -72,6 +78,13 @@ let currentFilter = state.filter || "all";
 let searchQuery = "";
 let typingTimeout;
 let demoSessionActive = true;
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#171c19" : "#f5f7f5";
+}
+
+applyTheme(state.settings.theme);
 
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -232,7 +245,7 @@ function renderHeader() {
       <button class="mobile-back" data-action="back" aria-label="Back to conversations">${svg("back")}</button>
       ${avatarMarkup(contact)}
       <div class="chat-person-copy"><div class="chat-person-name">${escapeHtml(contact.name)}</div>
-      <div class="chat-person-status"><span class="live-dot" style="${online ? "" : "background:#c9ceca;box-shadow:none"}"></span>${escapeHtml(contact.status)}</div></div>
+      <div class="chat-person-status"><span class="live-dot" style="${online ? "" : "background:#c9ceca;box-shadow:none"}"></span>${state.blockedContactIds.includes(contact.id) ? "Blocked" : escapeHtml(contact.status)}</div></div>
     </div>
     <div class="chat-actions">
       <button class="icon-button" data-action="voice-call" aria-label="Voice call" title="Voice call">${svg("phone")}</button>
@@ -247,6 +260,7 @@ function renderDetails() {
   const panel = document.getElementById("details-panel");
   if (!contact) { panel.innerHTML = ""; return; }
   const conversation = conversationFor(contact.id);
+  const isBlocked = state.blockedContactIds.includes(contact.id);
   const files = conversation ? conversation.messages.filter((message) => message.file).slice(-3).reverse() : [];
   panel.innerHTML = `
     <div class="details-topline"><span>ABOUT THIS CHAT</span><button data-action="more-details" aria-label="More options">${svg("more")}</button></div>
@@ -261,6 +275,7 @@ function renderDetails() {
       <button class="profile-action" data-action="video-call"><span class="profile-action-icon">${svg("video")}</span>Video</button>
       <button class="profile-action" data-action="search-chat"><span class="profile-action-icon">${svg("search")}</span>Search</button>
     </div>
+    <button class="block-contact-button${isBlocked ? " is-blocked" : ""}" data-action="toggle-block-contact">${isBlocked ? "Unblock contact" : "Block contact"}</button>
     <section class="details-section"><div class="details-section-header"><span>Shared moments</span><span>3 items</span></div>
       <div class="media-grid"><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>☼</span></button><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>✳</span></button><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>❋</span></button></div>
     </section>
@@ -276,7 +291,20 @@ function renderApp() {
   renderHeader();
   renderMessages();
   renderDetails();
+  renderBlockedState();
   document.getElementById("rail-initials").textContent = state.profile.initials || initialsFor(state.profile.name);
+}
+
+function renderBlockedState() {
+  const blocked = state.blockedContactIds.includes(state.activeId);
+  const banner = document.getElementById("blocked-banner");
+  const composer = document.getElementById("message-form");
+  banner.hidden = !blocked;
+  composer.hidden = blocked;
+  if (blocked) {
+    const contact = contactFor(state.activeId);
+    document.getElementById("blocked-contact-name").textContent = contact ? contact.name : "This contact";
+  }
 }
 
 function showToast(message) {
@@ -295,6 +323,10 @@ function getCurrentTime() {
 function addMessage({ text = "", file = null, sender = "jordan", conversationId = state.activeId }) {
   const conversation = conversationFor(conversationId);
   if (!conversation) return;
+  if (state.blockedContactIds.includes(conversationId)) {
+    showToast("Unblock this contact before messaging or sharing files.");
+    return;
+  }
   const message = { id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, sender, text, file, time: getCurrentTime(), stamp: Date.now(), status: sender === "jordan" ? "sent" : undefined };
   conversation.messages.push(message);
   conversation.lastActivity = message.stamp;
@@ -332,6 +364,10 @@ function selectConversation(id) {
 }
 
 function sendMessage(text) {
+  if (state.blockedContactIds.includes(state.activeId)) {
+    showToast("Unblock this contact before sending a message.");
+    return;
+  }
   const message = text.trim();
   if (!message) return;
   addMessage({ text: message });
@@ -343,7 +379,7 @@ function sendMessage(text) {
 
 function scheduleReply(message) {
   const contact = contactFor(state.activeId);
-  if (!contact || contact.status !== "Online") return;
+  if (!contact || contact.status !== "Online" || state.blockedContactIds.includes(contact.id)) return;
   const name = contact.name.split(" ")[0];
   const indicator = document.getElementById("typing-indicator");
   document.getElementById("typing-name").textContent = name;
@@ -352,6 +388,10 @@ function scheduleReply(message) {
   window.clearTimeout(typingTimeout);
   typingTimeout = window.setTimeout(() => {
     indicator.hidden = true;
+    if (state.blockedContactIds.includes(contact.id)) {
+      renderConversations();
+      return;
+    }
     const conversation = conversationFor(contact.id);
     if (conversation) {
       conversation.messages.forEach((message) => {
@@ -417,14 +457,45 @@ function openNewChat() {
 
 function openProfileSettings() {
   const profile = state.profile;
+  const blockedContacts = state.blockedContactIds.map(contactFor).filter(Boolean);
+  const blockedMarkup = blockedContacts.length
+    ? blockedContacts.map((contact) => `<div class="blocked-contact-row">${avatarMarkup(contact)}<span class="contact-result-copy"><span class="contact-result-name">${escapeHtml(contact.name)}</span><span class="contact-result-status">Blocked in this demo</span></span><button class="button-secondary unblock-button" data-unblock-contact="${escapeHtml(contact.id)}">Unblock</button></div>`).join("")
+    : '<div class="empty-files">Contacts you block will be listed here.</div>';
   const contents = `
+    <div class="settings-section-label">YOUR PROFILE</div>
     <div class="field-group"><label class="field-label" for="profile-name">Your name</label><input class="field-input" id="profile-name" maxlength="50" value="${escapeHtml(profile.name)}" required></div>
     <div class="field-group"><label class="field-label" for="profile-username">Username</label><input class="field-input" id="profile-username" maxlength="30" value="${escapeHtml(profile.username)}"></div>
     <div class="field-group"><label class="field-label" for="profile-about">A little about you</label><textarea class="field-input" id="profile-about" maxlength="140">${escapeHtml(profile.about)}</textarea></div>
+    <div class="settings-section-label settings-section-spaced">APPEARANCE</div>
+    <div class="theme-options" role="group" aria-label="Choose color theme">
+      <button class="theme-option${state.settings.theme === "light" ? " selected" : ""}" data-theme-choice="light" aria-pressed="${state.settings.theme === "light"}"><span class="theme-preview light-preview"><i></i><i></i><i></i></span><span>Light</span><span class="theme-check">${state.settings.theme === "light" ? "✓" : ""}</span></button>
+      <button class="theme-option${state.settings.theme === "dark" ? " selected" : ""}" data-theme-choice="dark" aria-pressed="${state.settings.theme === "dark"}"><span class="theme-preview dark-preview"><i></i><i></i><i></i></span><span>Dark</span><span class="theme-check">${state.settings.theme === "dark" ? "✓" : ""}</span></button>
+    </div>
+    <div class="settings-section-label settings-section-spaced">PRIVACY & NOTIFICATIONS</div>
     <div class="settings-block"><div class="settings-copy"><strong>Message notifications</strong><span>Keep up with the people you love.</span></div><button class="switch ${state.settings.notifications ? "on" : ""}" data-setting="notifications" role="switch" aria-checked="${state.settings.notifications}" aria-label="Message notifications"></button></div>
     <div class="settings-block"><div class="settings-copy"><strong>Read receipts</strong><span>Let people know when you've read their message.</span></div><button class="switch ${state.settings.readReceipts ? "on" : ""}" data-setting="readReceipts" role="switch" aria-checked="${state.settings.readReceipts}" aria-label="Read receipts"></button></div>
+    <div class="settings-section-label settings-section-spaced">BLOCKED CONTACTS <span class="blocked-count">${blockedContacts.length}</span></div>
+    <div class="blocked-contacts-list">${blockedMarkup}</div>
     <div class="modal-actions"><button class="button-secondary" data-action="logout">Log out</button><button class="button-primary" data-action="save-profile">Save changes</button></div>`;
-  openModal("Your profile", "Make this little space feel like you.", contents);
+  openModal("Settings & profile", "Personalize Chatter and manage who can message you.", contents);
+}
+
+function openBlockConfirmation() {
+  const contact = contactFor(state.activeId);
+  if (!contact) return;
+  openModal(
+    `Block ${contact.name}?`,
+    "They won't be able to message you in this demo. You can unblock them anytime in Settings.",
+    `<div class="block-confirm-note">Your existing conversation will stay here. Blocking only changes this browser demo.</div>
+     <div class="modal-actions"><button class="button-secondary" data-action="close-modal">Cancel</button><button class="button-danger" data-action="confirm-block-contact" data-contact-id="${escapeHtml(contact.id)}">Block contact</button></div>`
+  );
+}
+
+function unblockContact(id) {
+  state.blockedContactIds = state.blockedContactIds.filter((blockedId) => blockedId !== id);
+  saveState();
+  renderApp();
+  showToast(`${contactFor(id)?.name || "Contact"} can message you again.`);
 }
 
 function openFiles() {
@@ -436,6 +507,10 @@ function openFiles() {
 }
 
 function handleFiles(fileList) {
+  if (state.blockedContactIds.includes(state.activeId)) {
+    showToast("Unblock this contact before sharing a file.");
+    return;
+  }
   const files = Array.from(fileList);
   files.forEach((file) => {
     if (file.size > 10 * 1024 * 1024) {
@@ -462,8 +537,25 @@ function handleFiles(fileList) {
 }
 
 document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting]");
+  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting], [data-theme-choice], [data-unblock-contact]");
   if (!target) return;
+  if (target.dataset.themeChoice) {
+    state.settings.theme = target.dataset.themeChoice;
+    applyTheme(state.settings.theme);
+    saveState();
+    document.querySelectorAll(".theme-option").forEach((option) => {
+      const selected = option.dataset.themeChoice === state.settings.theme;
+      option.classList.toggle("selected", selected);
+      option.setAttribute("aria-pressed", String(selected));
+      option.querySelector(".theme-check").textContent = selected ? "✓" : "";
+    });
+    return;
+  }
+  if (target.dataset.unblockContact) {
+    unblockContact(target.dataset.unblockContact);
+    openProfileSettings();
+    return;
+  }
   if (target.dataset.conversation) { selectConversation(target.dataset.conversation); return; }
   if (target.dataset.contact) { createConversation(target.dataset.contact); closeModal(); return; }
   if (target.dataset.setting) {
@@ -494,6 +586,26 @@ document.addEventListener("click", (event) => {
     case "search-chat": document.getElementById("chat-search").focus(); break;
     case "shared-media": showToast("Shared photos will show here once you send one."); break;
     case "more-details": showToast("You're in a private one-to-one chat."); break;
+    case "toggle-block-contact":
+      if (state.blockedContactIds.includes(state.activeId)) {
+        unblockContact(state.activeId);
+      } else {
+        openBlockConfirmation();
+      }
+      break;
+    case "confirm-block-contact": {
+      const contactId = target.dataset.contactId;
+      if (contactFor(contactId) && !state.blockedContactIds.includes(contactId)) {
+        state.blockedContactIds.push(contactId);
+        const conversation = conversationFor(contactId);
+        if (conversation) conversation.unread = 0;
+        saveState();
+        closeModal();
+        renderApp();
+        showToast(`${contactFor(contactId).name} is blocked in this demo.`);
+      }
+      break;
+    }
     case "back": document.querySelector(".app-shell").classList.remove("mobile-chat-open"); break;
     case "close-modal": closeModal(); break;
     case "backdrop": if (event.target === target) closeModal(); break;

@@ -97,6 +97,7 @@
         <header id="chat-header" class="chat-header"></header>
         <div id="messages" class="messages-area" aria-live="polite" aria-relevant="additions text"></div>
         <div class="typing-indicator" id="typing-indicator" hidden><span class="typing-dots"><i></i><i></i><i></i></span><span id="typing-name"></span> is typing</div>
+        <div class="blocked-banner" id="blocked-banner" hidden><span class="blocked-banner-icon">⊘</span><span><strong id="blocked-contact-name"></strong> is blocked. Messages are disabled.</span><button type="button" data-action="toggle-block-contact">Unblock</button></div>
         <form class="composer" id="message-form">
           <div class="composer-toolbar">
             <button class="tool-button" type="button" data-action="attach" aria-label="Attach a file" title="Attach a file"><svg><use href="#i-attach"/></svg></button>
