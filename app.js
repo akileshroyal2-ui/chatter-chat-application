@@ -49,7 +49,7 @@ const seed = {
   activeId: "sophie",
   filter: "all",
   blockedContactIds: [],
-  settings: { notifications: true, readReceipts: true, theme: "light" }
+  settings: { notifications: true, readReceipts: true, theme: "light", chatFontSize: "medium" }
 };
 
 function loadState() {
@@ -65,6 +65,9 @@ function loadState() {
       ? parsed.blockedContactIds.filter((id) => restored.contacts.some((contact) => contact.id === id))
       : [];
     restored.settings.theme = restored.settings.theme === "dark" ? "dark" : "light";
+    restored.settings.chatFontSize = ["small", "medium", "large"].includes(restored.settings.chatFontSize)
+      ? restored.settings.chatFontSize
+      : "medium";
     return restored;
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof TypeError) {
@@ -101,6 +104,7 @@ function applyTheme(theme) {
 }
 
 applyTheme(state.settings.theme);
+document.documentElement.dataset.chatFontSize = state.settings.chatFontSize;
 
 function readDemoSession() {
   try { return sessionStorage.getItem(AUTH_SESSION_KEY) === "active"; }
@@ -843,8 +847,20 @@ function openChatOptions() {
   if (!contact) return;
   const blocked = state.blockedContactIds.includes(contact.id);
   const phone = contact.phone ? `<div class="chat-options-phone">Phone number <strong>${escapeHtml(contact.phone)}</strong></div>` : "";
+  const fontSizes = [
+    { value: "small", label: "Small", sample: "A" },
+    { value: "medium", label: "Medium", sample: "A" },
+    { value: "large", label: "Large", sample: "A" }
+  ];
   openModal("Chat options", `Manage your chat with ${contact.name}.`, `
     ${phone}
+    <button class="chat-option-button chat-attach-option" data-action="attach"><span class="chat-option-icon">${svg("attach")}</span><span><strong>Attach a file</strong><small>Share a photo or document in this chat.</small></span></button>
+    <section class="chat-font-control" aria-label="Chat message font size">
+      <div class="chat-font-heading"><strong>Message font size</strong><span>Applies to this browser</span></div>
+      <div class="chat-font-options" role="group" aria-label="Choose message font size">
+        ${fontSizes.map((size) => `<button class="chat-font-size-option${state.settings.chatFontSize === size.value ? " selected" : ""}" data-action="set-chat-font-size" data-font-size="${size.value}" aria-pressed="${state.settings.chatFontSize === size.value}"><span aria-hidden="true">${size.sample}</span>${size.label}</button>`).join("")}
+      </div>
+    </section>
     <div class="chat-option-list">
       <button class="chat-option-button" data-action="clear-chat-history"><span class="chat-option-icon">${svg("trash")}</span><span><strong>Clear chat history</strong><small>Remove all messages but keep this conversation.</small></span></button>
       <button class="chat-option-button" data-action="delete-chat"><span class="chat-option-icon">${svg("close")}</span><span><strong>Delete chat</strong><small>Remove this conversation; the contact stays saved.</small></span></button>
@@ -1119,7 +1135,23 @@ document.addEventListener("click", (event) => {
     case "contacts": openNewChat(); break;
     case "settings": openProfileSettings(); break;
     case "files": openFiles(); break;
-    case "attach": document.getElementById("file-input").click(); break;
+    case "attach":
+      closeModal();
+      document.getElementById("file-input").click();
+      break;
+    case "set-chat-font-size": {
+      const fontSize = target.dataset.fontSize;
+      if (!["small", "medium", "large"].includes(fontSize)) break;
+      state.settings.chatFontSize = fontSize;
+      document.documentElement.dataset.chatFontSize = fontSize;
+      document.querySelectorAll(".chat-font-size-option").forEach((option) => {
+        const selected = option.dataset.fontSize === fontSize;
+        option.classList.toggle("selected", selected);
+        option.setAttribute("aria-pressed", String(selected));
+      });
+      saveState();
+      break;
+    }
     case "emoji": openEmojiPicker(); break;
     case "insert-emoji": {
       const input = document.getElementById("message-input");
