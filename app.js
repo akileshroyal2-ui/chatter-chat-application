@@ -14,7 +14,13 @@ const seed = {
     { id: "ava", name: "Ava Thompson", username: "@ava.t", about: "making things with my hands 🌿", color: "#ddd0dd", initials: "AT", status: "last seen 24m ago", favorite: false },
     { id: "leo", name: "Leo Park", username: "@leo.park", about: "one day at a time ☁️", color: "#cdd8e7", initials: "LP", status: "Online", favorite: false },
     { id: "maya", name: "Maya Patel", username: "@mayap", about: "here for the plot", color: "#ead8a9", initials: "MP", status: "last seen 2h ago", favorite: true },
-    { id: "noah", name: "Noah Williams", username: "@noahw", about: "let's make it a good one", color: "#d8c9bc", initials: "NW", status: "last seen yesterday", favorite: false }
+    { id: "noah", name: "Noah Williams", username: "@noahw", about: "let's make it a good one", color: "#d8c9bc", initials: "NW", status: "last seen yesterday", favorite: false },
+    { id: "ella", name: "Ella Brooks", username: "@ellab", about: "books, brunch, and big ideas 📚", color: "#e6c6c4", initials: "EB", status: "Online", favorite: false },
+    { id: "amir", name: "Amir Hassan", username: "@amir.h", about: "finding the best dumplings in town 🥟", color: "#d3c6e5", initials: "AH", status: "Online", favorite: true },
+    { id: "grace", name: "Grace Kim", username: "@gracek", about: "one small adventure at a time 🌻", color: "#e3d6a8", initials: "GK", status: "last seen 12m ago", favorite: false },
+    { id: "theo", name: "Theo Martin", username: "@theo.m", about: "music is a place to go 🎧", color: "#c5d5dc", initials: "TM", status: "Online", favorite: false },
+    { id: "lucia", name: "Lucia Garcia", username: "@lucia.g", about: "making room for a little more joy 🌺", color: "#e7c4d3", initials: "LG", status: "last seen 1h ago", favorite: false },
+    { id: "ben", name: "Ben Carter", username: "@benc", about: "weekend hikes and weekday coffee ☕", color: "#cfdbbf", initials: "BC", status: "Online", favorite: false }
   ],
   conversations: [
     { id: "sophie", pinned: true, unread: 2, lastActivity: Date.now() - 7 * 60000, messages: [
@@ -78,6 +84,8 @@ let currentFilter = state.filter || "all";
 let searchQuery = "";
 let typingTimeout;
 let demoSessionActive = true;
+let activeCallInterval;
+let activeCallStartedAt;
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -434,6 +442,8 @@ function openModal(title, subtitle, contents, onReady) {
 }
 
 function closeModal() {
+  window.clearInterval(activeCallInterval);
+  activeCallInterval = undefined;
   document.getElementById("modal-root").innerHTML = "";
 }
 
@@ -489,6 +499,87 @@ function openBlockConfirmation() {
     `<div class="block-confirm-note">Your existing conversation will stay here. Blocking only changes this browser demo.</div>
      <div class="modal-actions"><button class="button-secondary" data-action="close-modal">Cancel</button><button class="button-danger" data-action="confirm-block-contact" data-contact-id="${escapeHtml(contact.id)}">Block contact</button></div>`
   );
+}
+
+function formatCallDuration() {
+  const elapsed = Math.floor((Date.now() - activeCallStartedAt) / 1000);
+  const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const seconds = String(elapsed % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function startDemoCall(mode) {
+  const contact = contactFor(state.activeId);
+  if (!contact) return;
+  if (state.blockedContactIds.includes(contact.id)) {
+    showToast("Unblock this contact before starting a call.");
+    return;
+  }
+  if (contact.status !== "Online") {
+    showToast(`${contact.name} is offline. This demo can't connect the call.`);
+    return;
+  }
+  const isVideo = mode === "video";
+  const contents = `
+    <div class="call-stage${isVideo ? " video-call-stage" : ""}">
+      ${isVideo ? '<div class="video-preview"><span class="video-preview-icon">◉</span><span>Camera preview unavailable in this demo</span></div>' : ""}
+      <div class="call-avatar-wrap">${avatarMarkup(contact)}<span class="call-pulse"></span></div>
+      <div class="call-contact-name">${escapeHtml(contact.name)}</div>
+      <div class="call-mode-label">${isVideo ? "Video call" : "Voice call"} · Demo</div>
+      <div class="call-duration" id="call-duration">00:00</div>
+      <div class="call-demo-note">This is a visual demo. No microphone, camera, or network call is connected.</div>
+    </div>
+    <div class="call-controls">
+      <button class="call-control" data-action="toggle-call-mic" aria-pressed="false"><span class="call-control-icon">${svg("mic")}</span><span>Mute</span></button>
+      ${isVideo ? `<button class="call-control" data-action="toggle-call-camera" aria-pressed="true"><span class="call-control-icon">${svg("video")}</span><span>Camera</span></button>` : ""}
+      <button class="call-end-button" data-action="end-call" aria-label="End call">${svg("phone-off")}<span>End call</span></button>
+    </div>`;
+  openModal(`${isVideo ? "Video" : "Voice"} call`, `Calling ${contact.name}`, contents);
+  document.querySelector(".modal").classList.add("call-window");
+  activeCallStartedAt = Date.now();
+  activeCallInterval = window.setInterval(() => {
+    const duration = document.getElementById("call-duration");
+    if (duration) duration.textContent = formatCallDuration();
+  }, 1000);
+}
+
+function suggestedReplyFor(contact, conversation) {
+  const lastIncoming = conversation.messages.slice().reverse().find((message) => message.sender === contact.id);
+  const text = lastIncoming ? lastIncoming.text.toLowerCase() : "";
+  if (/question|what do you think|any ideas|which one/.test(text)) return "I love that idea! Let me think it over and get back to you 😊";
+  if (/thank|thanks/.test(text)) return "You're so welcome! Always here for you 🫶";
+  if (/coffee|lunch|dinner|meet|weekend|tomorrow/.test(text)) return "That sounds lovely! Let's make a plan ☕";
+  if (/how are you|how's it going/.test(text)) return "I'm doing well, thanks for asking! How about you? 🌿";
+  if (/photo|picture|look at|found/.test(text)) return "Oh, I love this! Tell me more ✨";
+  return "That sounds lovely! Tell me more 😊";
+}
+
+function openAiTools(view = "home") {
+  const contact = contactFor(state.activeId);
+  const conversation = conversationFor(state.activeId);
+  if (!contact || !conversation) return;
+  let contents;
+  if (view === "summary") {
+    const recent = conversation.messages.slice(-6);
+    const summary = recent.length
+      ? recent.map((message) => `<li><strong>${message.sender === "jordan" ? "You" : escapeHtml(contact.name.split(" ")[0])}:</strong> ${escapeHtml(message.text || (message.file ? `Shared ${message.file.name}` : "Sent an attachment"))}</li>`).join("")
+      : "<li>This conversation is just getting started. Say hello to begin.</li>";
+    contents = `<div class="ai-output-card"><div class="ai-card-title">${svg("spark")} Recent conversation highlights</div><ul class="ai-summary-list">${summary}</ul></div>
+      <div class="ai-disclaimer">Demo summary generated locally from recent messages. No conversation content is sent to an AI service.</div>
+      <div class="modal-actions"><button class="button-secondary" data-action="ai-back">Back</button><button class="button-primary" data-action="close-modal">Done</button></div>`;
+  } else if (view === "suggest") {
+    const suggestion = suggestedReplyFor(contact, conversation);
+    contents = `<div class="ai-output-card"><div class="ai-card-title">${svg("spark")} A friendly reply idea</div><div class="ai-suggestion-text">${escapeHtml(suggestion)}</div></div>
+      <div class="ai-disclaimer">Demo suggestion generated locally. It isn't sent automatically, and your conversation stays in this browser.</div>
+      <div class="modal-actions"><button class="button-secondary" data-action="ai-back">Back</button><button class="button-primary" data-action="use-ai-suggestion" data-suggestion="${escapeHtml(suggestion)}">Add to message</button></div>`;
+  } else {
+    contents = `<div class="ai-tool-list">
+      <button class="ai-tool-card" data-action="ai-summary"><span class="ai-tool-icon">${svg("chat")}</span><span><strong>Summarize this chat</strong><small>Get a quick recap of recent messages.</small></span><span class="ai-tool-arrow">→</span></button>
+      <button class="ai-tool-card" data-action="ai-suggest"><span class="ai-tool-icon">${svg("spark")}</span><span><strong>Suggest a reply</strong><small>Get a friendly draft you can edit first.</small></span><span class="ai-tool-arrow">→</span></button>
+    </div>
+    <div class="ai-disclaimer">AI tools preview · Suggestions are generated locally in this demo; no messages are sent to an AI provider.</div>`;
+  }
+  openModal("AI writing tools", `A little help with your chat with ${contact.name}.`, contents);
 }
 
 function unblockContact(id) {
@@ -580,8 +671,38 @@ document.addEventListener("click", (event) => {
       break;
     }
     case "voice": showToast("Voice messages are on the roadmap ✨"); break;
-    case "voice-call":
-    case "video-call": showToast("Calling is ready for the real-time backend ✨"); break;
+    case "voice-call": startDemoCall("voice"); break;
+    case "video-call": startDemoCall("video"); break;
+    case "ai-tools": openAiTools(); break;
+    case "ai-summary": openAiTools("summary"); break;
+    case "ai-suggest": openAiTools("suggest"); break;
+    case "ai-back": openAiTools(); break;
+    case "use-ai-suggestion": {
+      const input = document.getElementById("message-input");
+      const prefix = input.value.trim() ? `${input.value.trim()}\n` : "";
+      input.value = `${prefix}${target.dataset.suggestion}`;
+      input.style.height = "31px";
+      input.style.height = `${Math.min(input.scrollHeight, 110)}px`;
+      closeModal();
+      input.focus();
+      showToast("Draft added. Give it a read before you send.");
+      break;
+    }
+    case "toggle-call-mic": {
+      const muted = target.getAttribute("aria-pressed") !== "true";
+      target.setAttribute("aria-pressed", String(muted));
+      target.classList.toggle("is-muted", muted);
+      target.querySelector("span:last-child").textContent = muted ? "Unmute" : "Mute";
+      break;
+    }
+    case "toggle-call-camera": {
+      const cameraOn = target.getAttribute("aria-pressed") !== "true";
+      target.setAttribute("aria-pressed", String(cameraOn));
+      target.classList.toggle("is-muted", !cameraOn);
+      target.querySelector("span:last-child").textContent = cameraOn ? "Camera" : "Camera off";
+      break;
+    }
+    case "end-call": closeModal(); showToast("Demo call ended."); break;
     case "contact-details": document.getElementById("details-panel").scrollTo({ top: 0, behavior: "smooth" }); showToast("A little more about this person, just to the right."); break;
     case "search-chat": document.getElementById("chat-search").focus(); break;
     case "shared-media": showToast("Shared photos will show here once you send one."); break;

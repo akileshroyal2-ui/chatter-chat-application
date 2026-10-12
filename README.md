@@ -20,11 +20,11 @@ People need a convenient way to communicate privately, find one another, exchang
 
 ### Included in this runnable demo
 
-The dashboard includes sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`.
+The dashboard includes sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, demo voice/video call screens, locally generated AI writing suggestions and chat summaries, file attachments, shared-file browsing, and a mobile layout. Profile and text-message data are stored in this browser's `localStorage`.
 
 ### Not provided by this static demo
 
-There is no live account registration or password verification, network connection, cross-device presence, real-time delivery between two people, MongoDB service, end-to-end encryption, or server-side file storage. The “private conversation” copy is a UI label, not a claim that the demo implements encryption. Use the architecture, algorithms, and integration notes in this document to build the production service; never treat client-side storage or simulated login as secure authentication.
+There is no live account registration or password verification, network connection, cross-device presence, real-time delivery between two people, MongoDB service, end-to-end encryption, server-side file storage, connected microphone/camera call, or external AI integration. Calls are visual UI demos and do not request device permissions. AI summaries and reply drafts are generated locally with simple demo rules; no messages are transmitted to an AI provider. The “private conversation” copy is a UI label, not a claim that the demo implements encryption. Use the architecture, algorithms, and integration notes in this document to build the production service; never treat client-side storage or simulated login as secure authentication.
 
 ## Requirements
 
@@ -426,7 +426,7 @@ getHistory(session, chatId, before, pageSize):
 
 1. Download or clone the project files.
 2. Open `index.html` in a modern browser, or serve this directory with any static web server.
-3. Try searching **Sophie**, switching the **Unread** filter, starting a chat with another contact, sending a message, editing your profile, changing the theme in Settings, blocking a contact from their profile, and attaching a file.
+3. Try searching **Sophie**, switching the **Unread** filter, starting a chat with a new contact, sending a message, editing your profile, changing the theme in Settings, blocking a contact from their profile, opening the AI writing tools from the composer, trying a demo voice/video call, and attaching a file.
 
 No website URL has been deployed. To create a shareable public website link, deploy this frontend to a static host (for example GitHub Pages or Netlify); deploying real multi-user chat additionally requires the production API, real-time service, database, private file storage, and HTTPS/WSS described above.
 
@@ -454,12 +454,17 @@ Run the manual checks in a current desktop and mobile browser. Verify persistenc
 | T16 | Choose Dark under Settings → Appearance, then refresh | Dark theme remains active in the same browser. |
 | T17 | Block a contact from their profile and try sending a message or file | Confirmation is required; chat shows a blocked banner and sending/sharing controls are hidden. |
 | T18 | Unblock the contact from the profile or Settings → Blocked contacts | The conversation controls return and the contact is removed from the blocked list. |
+| T19 | Start an audio/video call with an online contact | A demo call screen opens with a running timer, microphone controls, optional camera control, and an end-call button. |
+| T20 | Try to call an offline or blocked contact | The demo explains why it cannot start the call. |
+| T21 | Open AI tools, summarize a chat, and request a reply draft | Recent messages are summarized locally, or an editable reply draft is added to the composer without being sent. |
+| T22 | Open New chat | The contact picker shows all twelve sample contacts; selecting one starts a conversation. |
 
 ## Expected output
 
 - The home view shows pinned and recent conversations, search and filters, the selected message history, and profile/shared-file details.
 - A sent message appears on the right with its timestamp and changing delivery indicator.
 - A new contact can be selected without leaving the dashboard; on small screens, Back returns to the conversation list.
+- Voice/video buttons open a simulated call screen, and AI tools can locally summarize a chat or add a suggested reply draft.
 - Profile changes, preferences, and supported demo data persist in the current browser.
 - A selected file appears as a downloadable attachment card in this browser demo.
 

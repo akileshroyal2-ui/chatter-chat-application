@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=3">
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -22,6 +22,7 @@
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
       <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 5.2 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.8L8.1 11a16 16 0 0 0 4.9 4.9l1.7-1.9a2 2 0 0 1 1.8-.6l2.8.5a2 2 0 0 1 1.7 2Z"/></symbol>
+      <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M10.1 13.9a16 16 0 0 0 3.8 2.9l1.7-1.9a2 2 0 0 1 1.8-.6l2.8.5a2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-5.6-1.5M3.1 5.2A2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.8l-1.9 1.9M2 2l20 20"/></symbol>
       <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></symbol>
       <symbol id="i-attach" viewBox="0 0 24 24"><path d="m21.4 11.1-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 1 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 1 1-2.6-2.6l8.5-8.5"/></symbol>
@@ -37,6 +38,7 @@
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></symbol>
       <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Zm7 12 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></symbol>
       <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6M20 12H9"/></symbol>
+      <symbol id="i-camera-off" viewBox="0 0 24 24"><path d="m2 2 20 20M10.7 5H16v14h-5m-3 0H5a2 2 0 0 1-2-2V7.4M16 10l5-3v10l-5-3"/></symbol>
     </svg>
 
     <main class="app-shell">
@@ -102,6 +104,7 @@
           <div class="composer-toolbar">
             <button class="tool-button" type="button" data-action="attach" aria-label="Attach a file" title="Attach a file"><svg><use href="#i-attach"/></svg></button>
             <button class="tool-button emoji-trigger" type="button" data-action="emoji" aria-label="Add a smile" title="Add a smile"><svg><use href="#i-smile"/></svg></button>
+            <button class="tool-button ai-tool-button" type="button" data-action="ai-tools" aria-label="AI writing tools" title="AI writing tools"><svg><use href="#i-spark"/></svg><span>AI</span></button>
             <span class="toolbar-separator"></span>
             <span class="composer-hint">Make someone's day ✨</span>
             <button class="tool-button voice-button" type="button" data-action="voice" aria-label="Voice messages" title="Voice messages"><svg><use href="#i-mic"/></svg></button>
@@ -120,6 +123,6 @@
     <input id="file-input" type="file" hidden multiple>
     <div id="modal-root"></div>
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
   </body>
 </html>
