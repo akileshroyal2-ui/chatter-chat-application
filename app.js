@@ -87,6 +87,12 @@ let typingTimeout;
 let demoSessionActive = readDemoSession();
 let activeCallInterval;
 let activeCallStartedAt;
+let activeRecorder;
+let activeRecorderStream;
+let activeRecorderChunks = [];
+let voiceRecordingStartedAt = 0;
+let voiceRecordingTimer;
+let discardVoiceRecording = false;
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -233,6 +239,9 @@ function renderMessage(message, contact) {
       : `<span class="download-button" aria-label="File attached">${svg("check")}</span>`;
     body = `<div class="attachment-card"><span class="file-icon ${type}">${svg("file")}</span><span class="file-copy"><span class="file-name">${escapeHtml(message.file.name)}</span><span class="file-size">${escapeHtml(formatFileSize(message.file.size))}</span></span>${download}</div>${body ? `<span>${body}</span>` : ""}`;
   }
+  if (message.audio && message.audio.url) {
+    body = `<div class="voice-message-card"><span class="voice-message-icon">${svg("mic")}</span><span class="voice-message-copy"><strong>Voice message</strong><small>${escapeHtml(message.audio.duration)} sec</small></span><audio controls preload="none" src="${escapeHtml(message.audio.url)}" aria-label="Voice message from ${own ? "you" : escapeHtml(contact.name)}"></audio></div>`;
+  }
   const face = own ? "" : avatarMarkup(contact);
   return `<article class="message-row ${own ? "outgoing" : "incoming"}" data-message-id="${escapeHtml(message.id)}">
     ${face}
@@ -297,6 +306,7 @@ function renderDetails() {
     <div class="profile-card">
       ${avatarMarkup(contact)}
       <div class="profile-name">${escapeHtml(contact.name)}</div><div class="profile-username">${escapeHtml(contact.username)}</div>
+      ${contact.phone ? `<div class="contact-phone-number">${escapeHtml(contact.phone)}</div>` : ""}
       <div class="profile-status"><span class="live-dot" style="${contact.status === "Online" ? "" : "background:#c9ceca;box-shadow:none"}"></span>${escapeHtml(contact.status)}</div>
       <div class="profile-quote">${escapeHtml(contact.about)}</div>
     </div>
@@ -350,14 +360,14 @@ function getCurrentTime() {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date());
 }
 
-function addMessage({ text = "", file = null, sender = "jordan", conversationId = state.activeId }) {
+function addMessage({ text = "", file = null, audio = null, sender = "jordan", conversationId = state.activeId }) {
   const conversation = conversationFor(conversationId);
   if (!conversation) return;
   if (state.blockedContactIds.includes(conversationId)) {
     showToast("Unblock this contact before messaging or sharing files.");
     return;
   }
-  const message = { id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, sender, text, file, time: getCurrentTime(), stamp: Date.now(), status: sender === "jordan" ? "sent" : undefined };
+  const message = { id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, sender, text, file, audio, time: getCurrentTime(), stamp: Date.now(), status: sender === "jordan" ? "sent" : undefined };
   conversation.messages.push(message);
   conversation.lastActivity = message.stamp;
   if (sender === "jordan") conversation.unread = 0;
@@ -582,9 +592,207 @@ function submitAuthForm(form) {
 function openNewChat() {
   const results = state.contacts.map((contact) => {
     const existing = Boolean(conversationFor(contact.id));
-    return `<button class="contact-result" data-contact="${escapeHtml(contact.id)}">${avatarMarkup(contact)}<span class="contact-result-copy"><span class="contact-result-name">${escapeHtml(contact.name)}</span><span class="contact-result-status">${escapeHtml(contact.status)}${existing ? " · conversation started" : ""}</span></span><span class="contact-result-action">${existing ? "Open chat →" : "Say hello →"}</span></button>`;
+    return `<button class="contact-result" data-contact="${escapeHtml(contact.id)}">${avatarMarkup(contact)}<span class="contact-result-copy"><span class="contact-result-name">${escapeHtml(contact.name)}</span><span class="contact-result-status">${escapeHtml(contact.phone || contact.status)}${contact.phone ? ` · ${escapeHtml(contact.status)}` : ""}${existing ? " · conversation started" : ""}</span></span><span class="contact-result-action">${existing ? "Open chat →" : "Say hello →"}</span></button>`;
   }).join("");
-  openModal("A new little hello", "Pick someone from your contacts to start a conversation.", `<div class="contact-results">${results}</div>`);
+  openModal("A new little hello", "Choose someone, or add a contact with their phone number.", `
+    <form id="new-contact-form" class="new-contact-form" novalidate>
+      <div class="new-contact-form-title">${svg("users")} Add a new person</div>
+      <div class="new-contact-fields">
+        <div class="field-group"><label class="field-label" for="new-contact-name">Name</label><input class="field-input" id="new-contact-name" name="name" maxlength="50" autocomplete="name" placeholder="Their name" required></div>
+        <div class="field-group"><label class="field-label" for="new-contact-phone">Phone number</label><input class="field-input" id="new-contact-phone" name="phone" type="tel" inputmode="tel" maxlength="24" autocomplete="tel" placeholder="+1 555 123 4567" required></div>
+      </div>
+      <div class="new-contact-error" id="new-contact-error" role="alert" hidden></div>
+      <button class="button-primary new-contact-submit" type="submit">Add contact & start chat</button>
+    </form>
+    <div class="new-chat-list-heading">YOUR CONTACTS <span>${state.contacts.length}</span></div>
+    <div class="contact-results">${results || '<div class="empty-files">No contacts yet. Add someone by phone number above.</div>'}</div>`);
+}
+
+function addContactFromForm(form) {
+  const name = form.elements.name.value.trim();
+  const phone = normalizePhone(form.elements.phone.value);
+  const error = document.getElementById("new-contact-error");
+  if (name.length < 2) {
+    error.textContent = "Enter a name with at least 2 characters.";
+    error.hidden = false;
+    return;
+  }
+  if (!/^\+?\d{7,15}$/.test(phone)) {
+    error.textContent = "Enter a valid phone number with country code and 7–15 digits.";
+    error.hidden = false;
+    return;
+  }
+  const duplicate = state.contacts.find((contact) => contact.phone && normalizePhone(contact.phone) === phone);
+  if (duplicate) {
+    error.textContent = `That number is already saved as ${duplicate.name}. Select them from your contacts.`;
+    error.hidden = false;
+    return;
+  }
+  if (state.profile.phone && normalizePhone(state.profile.phone) === phone) {
+    error.textContent = "That is your own profile number. Enter the number of the person you want to chat with.";
+    error.hidden = false;
+    return;
+  }
+  const palette = ["#cfddd0", "#e4cdb5", "#ddd0dd", "#cdd8e7", "#ead8a9", "#d8c9bc"];
+  const contact = {
+    id: `contact-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    phone,
+    username: `@${name.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "")}`,
+    about: "A new friend on Chatter",
+    color: palette[state.contacts.length % palette.length],
+    initials: initialsFor(name),
+    status: "Offline",
+    favorite: false
+  };
+  state.contacts.push(contact);
+  saveState();
+  closeModal();
+  createConversation(contact.id);
+  showToast(`${contact.name} added. Your new chat is ready.`);
+}
+
+function startVoiceMessage() {
+  if (state.blockedContactIds.includes(state.activeId)) {
+    showToast("Unblock this contact before sending a voice message.");
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+    showToast("Voice recording isn't supported by this browser. Try a recent browser over HTTPS.");
+    return;
+  }
+  discardVoiceRecording = false;
+  openModal("Record a voice message", "Your browser will ask for microphone access. This demo keeps the recording in this browser.", `
+    <div class="voice-recorder-panel"><span class="voice-recorder-mic">${svg("mic")}</span><strong id="voice-recording-state">Getting your microphone…</strong><span id="voice-recording-time">00:00 / 01:00</span></div>
+    <div class="voice-recorder-actions"><button class="button-secondary" data-action="voice-cancel">Cancel</button><button class="button-primary" id="voice-record-stop" data-action="voice-stop" disabled>Stop & send</button></div>
+    <div class="ai-disclaimer">Recording is optional. Audio is stored only in this browser's demo chat history.</div>`);
+  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    if (!document.getElementById("voice-record-stop")) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    activeRecorderStream = stream;
+    activeRecorderChunks = [];
+    const preferredMime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((mime) => MediaRecorder.isTypeSupported(mime));
+    activeRecorder = preferredMime
+      ? new MediaRecorder(stream, { mimeType: preferredMime, audioBitsPerSecond: 32000 })
+      : new MediaRecorder(stream);
+    activeRecorder.ondataavailable = (event) => {
+      if (event.data.size) activeRecorderChunks.push(event.data);
+    };
+    activeRecorder.onerror = (event) => {
+      console.error("The voice recording failed.", event.error);
+      showToast("The voice recording failed. Please try again.");
+      cancelVoiceRecording();
+    };
+    activeRecorder.onstop = finishVoiceRecording;
+    voiceRecordingStartedAt = Date.now();
+    const stateLabel = document.getElementById("voice-recording-state");
+    const stopButton = document.getElementById("voice-record-stop");
+    if (!stateLabel || !stopButton) {
+      cancelVoiceRecording();
+      return;
+    }
+    stateLabel.textContent = "Recording — speak when you're ready";
+    stopButton.disabled = false;
+    activeRecorder.start(250);
+    voiceRecordingTimer = window.setInterval(() => {
+      const timer = document.getElementById("voice-recording-time");
+      if (!timer) return;
+      const elapsed = Math.min(60, Math.floor((Date.now() - voiceRecordingStartedAt) / 1000));
+      timer.textContent = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")} / 01:00`;
+      if (elapsed >= 60) stopVoiceRecording();
+    }, 250);
+  }).catch((error) => {
+    if (!document.getElementById("voice-record-stop")) return;
+    console.error("Could not access the microphone for a voice message.", error);
+    closeModal();
+    showToast(error.name === "NotAllowedError" || error.name === "PermissionDeniedError"
+      ? "Microphone access was denied. Allow microphone access in your browser to record a message."
+      : "Couldn't open your microphone. Check that it is connected and try again.");
+  });
+}
+
+function stopVoiceRecording() {
+  if (!activeRecorder || activeRecorder.state === "inactive") return;
+  const stopButton = document.getElementById("voice-record-stop");
+  if (stopButton) {
+    stopButton.disabled = true;
+    stopButton.textContent = "Preparing recording…";
+  }
+  activeRecorder.stop();
+}
+
+function cancelVoiceRecording() {
+  discardVoiceRecording = true;
+  window.clearInterval(voiceRecordingTimer);
+  voiceRecordingTimer = undefined;
+  if (activeRecorder && activeRecorder.state !== "inactive") activeRecorder.stop();
+  else {
+    if (activeRecorderStream) activeRecorderStream.getTracks().forEach((track) => track.stop());
+    activeRecorderStream = undefined;
+    activeRecorder = undefined;
+    closeModal();
+  }
+}
+
+function finishVoiceRecording() {
+  window.clearInterval(voiceRecordingTimer);
+  voiceRecordingTimer = undefined;
+  if (activeRecorderStream) activeRecorderStream.getTracks().forEach((track) => track.stop());
+  activeRecorderStream = undefined;
+  activeRecorder = undefined;
+  const duration = Math.min(60, Math.max(1, Math.round((Date.now() - voiceRecordingStartedAt) / 1000)));
+  const discarded = discardVoiceRecording;
+  const chunks = activeRecorderChunks;
+  activeRecorderChunks = [];
+  closeModal();
+  if (discarded) return;
+  const audioBlob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
+  if (!audioBlob.size) {
+    showToast("No audio was recorded. Try speaking a little longer.");
+    return;
+  }
+  if (audioBlob.size > 400 * 1024) {
+    showToast("That recording is too large for this local demo. Try a shorter voice message.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result !== "string") {
+      showToast("Couldn't prepare the voice message. Please try again.");
+      return;
+    }
+    addMessage({ audio: { url: reader.result, mimeType: audioBlob.type, duration } });
+  };
+  reader.onerror = () => {
+    console.error("Could not prepare the voice message.", reader.error);
+    showToast("Couldn't save the voice message. Please try again.");
+  };
+  reader.readAsDataURL(audioBlob);
+}
+
+function generateAiDraft() {
+  const topicField = document.getElementById("ai-draft-topic");
+  const toneField = document.getElementById("ai-draft-tone");
+  const topic = topicField.value.trim().replace(/[.!?]+$/g, "");
+  if (!topic) {
+    topicField.setCustomValidity("Type a short idea for your message first.");
+    topicField.reportValidity();
+    return;
+  }
+  topicField.setCustomValidity("");
+  const draft = {
+    friendly: `Hey! ${topic.charAt(0).toLowerCase()}${topic.slice(1)} — what do you think? 😊`,
+    warm: `Hi! I was thinking about this and wanted to share: ${topic.charAt(0).toLowerCase()}${topic.slice(1)}. Hope your day is going well 🌿`,
+    concise: `${topic.charAt(0).toUpperCase()}${topic.slice(1)}?`
+  }[toneField.value];
+  const input = document.getElementById("message-input");
+  input.value = input.value.trim() ? `${input.value.trim()}\n${draft}` : draft;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  closeModal();
+  input.focus();
+  showToast("Draft added to your message. Give it a read before sending.");
 }
 
 function openProfileSettings() {
@@ -696,10 +904,20 @@ function openAiTools(view = "home") {
     contents = `<div class="ai-output-card"><div class="ai-card-title">${svg("spark")} A friendly reply idea</div><div class="ai-suggestion-text">${escapeHtml(suggestion)}</div></div>
       <div class="ai-disclaimer">Demo suggestion generated locally. It isn't sent automatically, and your conversation stays in this browser.</div>
       <div class="modal-actions"><button class="button-secondary" data-action="ai-back">Back</button><button class="button-primary" data-action="use-ai-suggestion" data-suggestion="${escapeHtml(suggestion)}">Add to message</button></div>`;
+  } else if (view === "draft") {
+    contents = `<div class="ai-draft-form">
+      <label class="field-label" for="ai-draft-topic">What would you like to say?</label>
+      <textarea class="field-input" id="ai-draft-topic" maxlength="240" placeholder="e.g. ask if they're free this weekend"></textarea>
+      <label class="field-label" for="ai-draft-tone">Choose a writing style</label>
+      <select class="field-input" id="ai-draft-tone"><option value="friendly">Friendly</option><option value="warm">Warm & thoughtful</option><option value="concise">Short & simple</option></select>
+      <button class="button-primary ai-draft-submit" data-action="generate-ai-draft">Draft message</button>
+      <div class="ai-disclaimer">This writing helper uses simple local templates. Review and edit its draft before you send it.</div>
+    </div>`;
   } else {
     contents = `<div class="ai-tool-list">
       <button class="ai-tool-card" data-action="ai-summary"><span class="ai-tool-icon">${svg("chat")}</span><span><strong>Summarize this chat</strong><small>Get a quick recap of recent messages.</small></span><span class="ai-tool-arrow">→</span></button>
       <button class="ai-tool-card" data-action="ai-suggest"><span class="ai-tool-icon">${svg("spark")}</span><span><strong>Suggest a reply</strong><small>Get a friendly draft you can edit first.</small></span><span class="ai-tool-arrow">→</span></button>
+      <button class="ai-tool-card" data-action="ai-draft"><span class="ai-tool-icon">${svg("send")}</span><span><strong>Draft a message</strong><small>Type an idea and choose a writing style.</small></span><span class="ai-tool-arrow">→</span></button>
     </div>
     <div class="ai-disclaimer">AI tools preview · Suggestions are generated locally in this demo; no messages are sent to an AI provider.</div>`;
   }
@@ -798,10 +1016,14 @@ document.addEventListener("click", (event) => {
       input.focus();
       break;
     }
-    case "voice": showToast("Voice messages are on the roadmap ✨"); break;
+    case "voice": startVoiceMessage(); break;
+    case "voice-stop": stopVoiceRecording(); break;
+    case "voice-cancel": cancelVoiceRecording(); break;
     case "voice-call": startDemoCall("voice"); break;
     case "video-call": startDemoCall("video"); break;
     case "ai-tools": openAiTools(); break;
+    case "ai-draft": openAiTools("draft"); break;
+    case "generate-ai-draft": generateAiDraft(); break;
     case "ai-summary": openAiTools("summary"); break;
     case "ai-suggest": openAiTools("suggest"); break;
     case "ai-back": openAiTools(); break;
@@ -856,8 +1078,8 @@ document.addEventListener("click", (event) => {
       break;
     }
     case "back": document.querySelector(".app-shell").classList.remove("mobile-chat-open"); break;
-    case "close-modal": closeModal(); break;
-    case "backdrop": if (event.target === target) closeModal(); break;
+    case "close-modal": if (activeRecorder) cancelVoiceRecording(); else closeModal(); break;
+    case "backdrop": if (event.target === target) { if (activeRecorder) cancelVoiceRecording(); else closeModal(); } break;
     case "logout":
       closeModal();
       setDemoSession(false);
@@ -890,6 +1112,11 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("submit", (event) => {
+  if (event.target.id === "new-contact-form") {
+    event.preventDefault();
+    addContactFromForm(event.target);
+    return;
+  }
   if (event.target.id !== "auth-form") return;
   event.preventDefault();
   submitAuthForm(event.target);
@@ -937,7 +1164,10 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     document.getElementById("chat-search").focus();
   }
-  if (event.key === "Escape" && demoSessionActive) closeModal();
+  if (event.key === "Escape" && demoSessionActive) {
+    if (activeRecorder) cancelVoiceRecording();
+    else closeModal();
+  }
 });
 
 if (demoSessionActive) {
