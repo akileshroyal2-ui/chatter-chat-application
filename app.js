@@ -247,6 +247,7 @@ function renderMessage(message, contact) {
   return `<article class="message-row ${own ? "outgoing" : "incoming"}" data-message-id="${escapeHtml(message.id)}">
     ${face}
     <div class="message-content"><div class="message-bubble">${body}</div><div class="message-meta"><time>${escapeHtml(message.time || "")}</time>${own ? iconStatus(message.status) : ""}</div></div>
+    <button class="message-delete-button" data-action="delete-message" data-message-id="${escapeHtml(message.id)}" aria-label="Delete message for me" title="Delete message for me">${svg("trash")}</button>
   </article>`;
 }
 
@@ -303,7 +304,7 @@ function renderDetails() {
   const isBlocked = state.blockedContactIds.includes(contact.id);
   const files = conversation ? conversation.messages.filter((message) => message.file).slice(-3).reverse() : [];
   panel.innerHTML = `
-    <div class="details-topline"><span>ABOUT THIS CHAT</span><button data-action="more-details" aria-label="More options">${svg("more")}</button></div>
+    <div class="details-topline"><span>ABOUT THIS CHAT</span><button data-action="chat-options" aria-label="Chat options">${svg("more")}</button></div>
     <div class="profile-card">
       ${avatarMarkup(contact)}
       <div class="profile-name">${escapeHtml(contact.name)}</div><div class="profile-username">${escapeHtml(contact.username)}</div>
@@ -316,7 +317,7 @@ function renderDetails() {
       <button class="profile-action" data-action="video-call"><span class="profile-action-icon">${svg("video")}</span>Video</button>
       <button class="profile-action" data-action="search-chat"><span class="profile-action-icon">${svg("search")}</span>Search</button>
     </div>
-    <button class="block-contact-button${isBlocked ? " is-blocked" : ""}" data-action="toggle-block-contact">${isBlocked ? "Unblock contact" : "Block contact"}</button>
+    <button class="block-contact-button${isBlocked ? " is-blocked" : ""}" data-action="toggle-block-contact">${isBlocked ? "Unblock contact / number" : `Block ${contact.phone ? "number" : "contact"}`}</button>
     <section class="details-section"><div class="details-section-header"><span>Shared moments</span><span>3 items</span></div>
       <div class="media-grid"><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>☼</span></button><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>✳</span></button><button class="media-tile" data-action="shared-media" aria-label="Shared photo"><span>❋</span></button></div>
     </section>
@@ -802,7 +803,7 @@ function openProfileSettings() {
   const profile = state.profile;
   const blockedContacts = state.blockedContactIds.map(contactFor).filter(Boolean);
   const blockedMarkup = blockedContacts.length
-    ? blockedContacts.map((contact) => `<div class="blocked-contact-row">${avatarMarkup(contact)}<span class="contact-result-copy"><span class="contact-result-name">${escapeHtml(contact.name)}</span><span class="contact-result-status">Blocked in this demo</span></span><button class="button-secondary unblock-button" data-unblock-contact="${escapeHtml(contact.id)}">Unblock</button></div>`).join("")
+    ? blockedContacts.map((contact) => `<div class="blocked-contact-row">${avatarMarkup(contact)}<span class="contact-result-copy"><span class="contact-result-name">${escapeHtml(contact.name)}</span><span class="contact-result-status">${escapeHtml(contact.phone || "Blocked in this demo")}</span></span><button class="button-secondary unblock-button" data-unblock-contact="${escapeHtml(contact.id)}">Unblock</button></div>`).join("")
     : '<div class="empty-files">Contacts you block will be listed here.</div>';
   const contents = `
     <div class="settings-section-label">YOUR PROFILE</div>
@@ -828,12 +829,108 @@ function openProfileSettings() {
 function openBlockConfirmation() {
   const contact = contactFor(state.activeId);
   if (!contact) return;
+  const identifier = contact.phone ? ` (${contact.phone})` : "";
   openModal(
-    `Block ${contact.name}?`,
-    "They won't be able to message you in this demo. You can unblock them anytime in Settings.",
-    `<div class="block-confirm-note">Your existing conversation will stay here. Blocking only changes this browser demo.</div>
-     <div class="modal-actions"><button class="button-secondary" data-action="close-modal">Cancel</button><button class="button-danger" data-action="confirm-block-contact" data-contact-id="${escapeHtml(contact.id)}">Block contact</button></div>`
+    `Block ${contact.name}${identifier}?`,
+    "This contact and number will be blocked in this browser demo.",
+    `<div class="block-confirm-note">Your existing chat history will stay here, but you won't be able to send messages, files, or voice messages to this contact. Unblock them in Settings anytime.</div>
+     <div class="modal-actions"><button class="button-secondary" data-action="close-modal">Cancel</button><button class="button-danger" data-action="confirm-block-contact" data-contact-id="${escapeHtml(contact.id)}">Block number</button></div>`
   );
+}
+
+function openChatOptions() {
+  const contact = contactFor(state.activeId);
+  if (!contact) return;
+  const blocked = state.blockedContactIds.includes(contact.id);
+  const phone = contact.phone ? `<div class="chat-options-phone">Phone number <strong>${escapeHtml(contact.phone)}</strong></div>` : "";
+  openModal("Chat options", `Manage your chat with ${contact.name}.`, `
+    ${phone}
+    <div class="chat-option-list">
+      <button class="chat-option-button" data-action="clear-chat-history"><span class="chat-option-icon">${svg("trash")}</span><span><strong>Clear chat history</strong><small>Remove all messages but keep this conversation.</small></span></button>
+      <button class="chat-option-button" data-action="delete-chat"><span class="chat-option-icon">${svg("close")}</span><span><strong>Delete chat</strong><small>Remove this conversation; the contact stays saved.</small></span></button>
+      <button class="chat-option-button chat-option-danger" data-action="toggle-block-contact"><span class="chat-option-icon">${svg("users")}</span><span><strong>${blocked ? "Unblock contact / number" : "Block contact / number"}</strong><small>${blocked ? "Allow this number to message you again." : escapeHtml(contact.phone || contact.name)}</small></span></button>
+    </div>
+    <div class="ai-disclaimer">Delete and block actions only change this browser's local demo. Nothing is deleted or blocked on another device.</div>`);
+}
+
+function openDeleteMessageConfirmation(messageId) {
+  const conversation = conversationFor(state.activeId);
+  const message = conversation?.messages.find((item) => item.id === messageId);
+  if (!message) return;
+  const preview = message.text || (message.audio ? "Voice message" : message.file ? `File: ${message.file.name}` : "Attachment");
+  openModal("Delete this message?", "Remove just this message from your local chat history.", `
+    <div class="delete-preview">${escapeHtml(preview)}</div>
+    <div class="ai-disclaimer">This deletes the message only in your browser demo; it cannot remove a message from someone else's device.</div>
+    <div class="modal-actions"><button class="button-secondary" data-action="close-modal">Keep message</button><button class="button-danger" data-action="confirm-delete-message" data-message-id="${escapeHtml(messageId)}">Delete for me</button></div>`);
+}
+
+function openClearHistoryConfirmation() {
+  const contact = contactFor(state.activeId);
+  if (!contact) return;
+  openModal(`Clear chat with ${contact.name}?`, "Remove all messages while keeping the contact and conversation.", `
+    <div class="block-confirm-note">This removes text, shared files, and voice messages from this browser's chat history. The conversation will remain available as an empty chat.</div>
+    <div class="modal-actions"><button class="button-secondary" data-action="chat-options">Cancel</button><button class="button-danger" data-action="confirm-clear-chat-history">Clear history</button></div>`);
+}
+
+function openDeleteChatConfirmation() {
+  const contact = contactFor(state.activeId);
+  if (!contact) return;
+  openModal(`Delete chat with ${contact.name}?`, "Remove this conversation from your chat list.", `
+    <div class="block-confirm-note">Messages and shared voice/file attachments in this local conversation will be removed. ${contact.name} will remain in your contacts, and you can start a new chat anytime.</div>
+    <div class="modal-actions"><button class="button-secondary" data-action="chat-options">Cancel</button><button class="button-danger" data-action="confirm-delete-chat">Delete chat</button></div>`);
+}
+
+function openEmojiPicker() {
+  const groups = [
+    { name: "Smileys", emojis: "😀 😃 😄 😁 😆 😅 😂 🙂 🙃 😉 😊 😍 🥰 😘 😋 😎 🤩 🥳 😭 😴 🤗 🤔 🙏" },
+    { name: "Hands", emojis: "👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫶 🤟 🤘 🤙 👈 👉 👆 👇 👍 👎 👏 🙌 💪" },
+    { name: "Hearts", emojis: "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 💕 💞 💓 💗 💖 💘 💝 💟" },
+    { name: "Nature", emojis: "🌱 🌿 🍀 🌻 🌼 🌷 🌹 🪻 🌸 🌈 ☀️ 🌙 ⭐ ✨ 🔥 🌊 ☁️ 🦋 🐝 🐈 🐕" },
+    { name: "Food", emojis: "☕ 🍵 🧋 🍰 🎂 🍪 🍓 🍒 🍉 🍋 🥑 🍕 🍜 🍣 🍩 🥐 🥑" },
+    { name: "Fun", emojis: "🎉 🎊 🎈 🎁 🎨 🎧 🎵 🎶 ⚽ 🏀 🎮 📚 ✈️ 🚲 🏖️ 🥹 🫠 💌" }
+  ];
+  const tabs = groups.map((group, index) => `<button class="emoji-category${index === 0 ? " selected" : ""}" role="tab" aria-selected="${index === 0}" data-emoji-category="${index}">${escapeHtml(group.name)}</button>`).join("");
+  const panels = groups.map((group, index) => `<div class="emoji-grid" role="tabpanel" data-emoji-panel="${index}" ${index ? "hidden" : ""}>${group.emojis.split(" ").map((emoji) => `<button class="emoji-choice" type="button" data-action="insert-emoji" data-emoji="${escapeHtml(emoji)}" aria-label="Insert ${escapeHtml(emoji)}">${emoji}</button>`).join("")}</div>`).join("");
+  openModal("Choose an emoji", "Add a little expression to your message.", `<div class="emoji-picker-tabs" role="tablist" aria-label="Emoji categories">${tabs}</div>${panels}`);
+}
+
+function deleteMessageForMe(messageId) {
+  const conversation = conversationFor(state.activeId);
+  if (!conversation) return;
+  const messageIndex = conversation.messages.findIndex((item) => item.id === messageId);
+  if (messageIndex === -1) return;
+  conversation.messages.splice(messageIndex, 1);
+  conversation.lastActivity = conversation.messages.length
+    ? conversation.messages[conversation.messages.length - 1].stamp || Date.now()
+    : Date.now();
+  saveState();
+  closeModal();
+  renderApp();
+  showToast("Message deleted from your local chat.");
+}
+
+function clearActiveChatHistory() {
+  const conversation = conversationFor(state.activeId);
+  if (!conversation) return;
+  conversation.messages = [];
+  conversation.unread = 0;
+  conversation.lastActivity = Date.now();
+  saveState();
+  closeModal();
+  renderApp();
+  showToast("Chat history cleared. The conversation is still here.");
+}
+
+function deleteActiveChat() {
+  const deletedId = state.activeId;
+  const conversationIndex = state.conversations.findIndex((conversation) => conversation.id === deletedId);
+  if (conversationIndex === -1) return;
+  state.conversations.splice(conversationIndex, 1);
+  state.activeId = [...state.conversations].sort((a, b) => b.lastActivity - a.lastActivity)[0]?.id || "";
+  saveState();
+  closeModal();
+  renderApp();
+  showToast("Chat deleted. The contact is still in your contacts.");
 }
 
 function formatCallDuration() {
@@ -973,8 +1070,19 @@ function handleFiles(fileList) {
 }
 
 document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting], [data-theme-choice], [data-unblock-contact], [data-auth-mode]");
+  const target = event.target.closest("[data-action], [data-conversation], [data-contact], [data-setting], [data-theme-choice], [data-unblock-contact], [data-auth-mode], [data-emoji-category]");
   if (!target) return;
+  if (target.dataset.emojiCategory !== undefined) {
+    document.querySelectorAll(".emoji-category").forEach((tab) => {
+      const selected = tab === target;
+      tab.classList.toggle("selected", selected);
+      tab.setAttribute("aria-selected", String(selected));
+    });
+    document.querySelectorAll(".emoji-grid").forEach((grid) => {
+      grid.hidden = grid.dataset.emojiPanel !== target.dataset.emojiCategory;
+    });
+    return;
+  }
   if (target.dataset.authMode) {
     renderAuthScreen(target.dataset.authMode);
     return;
@@ -1012,10 +1120,13 @@ document.addEventListener("click", (event) => {
     case "settings": openProfileSettings(); break;
     case "files": openFiles(); break;
     case "attach": document.getElementById("file-input").click(); break;
-    case "emoji": {
+    case "emoji": openEmojiPicker(); break;
+    case "insert-emoji": {
       const input = document.getElementById("message-input");
       const start = input.selectionStart;
-      input.setRangeText("😊", start, input.selectionEnd, "end");
+      input.setRangeText(target.dataset.emoji, start, input.selectionEnd, "end");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      closeModal();
       input.focus();
       break;
     }
@@ -1059,9 +1170,16 @@ document.addEventListener("click", (event) => {
     case "contact-details": document.getElementById("details-panel").scrollTo({ top: 0, behavior: "smooth" }); showToast("A little more about this person, just to the right."); break;
     case "search-chat": document.getElementById("chat-search").focus(); break;
     case "shared-media": showToast("Shared photos will show here once you send one."); break;
-    case "more-details": showToast("You're in a private one-to-one chat."); break;
+    case "chat-options": openChatOptions(); break;
+    case "delete-message": openDeleteMessageConfirmation(target.dataset.messageId); break;
+    case "confirm-delete-message": deleteMessageForMe(target.dataset.messageId); break;
+    case "clear-chat-history": openClearHistoryConfirmation(); break;
+    case "confirm-clear-chat-history": clearActiveChatHistory(); break;
+    case "delete-chat": openDeleteChatConfirmation(); break;
+    case "confirm-delete-chat": deleteActiveChat(); break;
     case "toggle-block-contact":
       if (state.blockedContactIds.includes(state.activeId)) {
+        closeModal();
         unblockContact(state.activeId);
       } else {
         openBlockConfirmation();

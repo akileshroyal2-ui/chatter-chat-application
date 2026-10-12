@@ -20,7 +20,7 @@ People need a convenient way to communicate privately, find one another, exchang
 
 ### Included in this runnable demo
 
-The dashboard includes a demo sign-in and profile-creation screen with email and phone fields, sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, browser-recorded voice messages with local playback, demo voice/video call screens, locally generated AI writing suggestions, typed message drafts and chat summaries, contact creation by phone number, file attachments, shared-file browsing, and a mobile layout. Profile, contacts, text messages, and small voice recordings are stored in this browser's `localStorage`; the demo sign-in state is limited to the current browser tab.
+The dashboard includes a demo sign-in and profile-creation screen with email and phone fields, sample accounts and conversations, conversation search, All/Unread/Favorites filters, one-to-one chat history, a simulated reply for an online contact, message status indicators, contact selection, local profile settings, notification/read-receipt preferences, persistent light/dark themes, profile-level block/unblock controls, per-message deletion, confirmed chat-history clearing and chat deletion, a categorized emoji picker, browser-recorded voice messages with local playback, demo voice/video call screens, locally generated AI writing suggestions, typed message drafts and chat summaries, contact creation by phone number, file attachments, shared-file browsing, and a mobile layout. Profile, contacts, text messages, and small voice recordings are stored in this browser's `localStorage`; the demo sign-in state is limited to the current browser tab.
 
 ### Not provided by this static demo
 
@@ -39,7 +39,9 @@ The sign-in and registration screens only validate input format. They do not ver
 7. Retrieve conversation history and shared files.
 8. Log out, expire sessions, and protect authenticated routes.
 9. Attach and download files with size/type validation.
-10. Personalize the interface with a persistent light or dark theme and block/unblock contacts.
+10. Personalize the interface with a persistent light or dark theme and block/unblock contacts or phone numbers.
+11. Delete individual messages locally, clear a chat while keeping the contact, or delete a conversation while retaining the contact.
+12. Insert emojis from categorized picker options at the composer's current cursor position.
 
 ### Non-functional
 
@@ -464,6 +466,12 @@ Run the manual checks in a current desktop and mobile browser. Verify persistenc
 | T25 | Sign in with a valid-format email or international phone number and an 8+ character demo password | Dashboard opens; the provided email or phone is saved as local profile data; password remains transient and is not verified. |
 | T26 | Sign out, then refresh the same browser tab | Sign-in screen appears; reloading does not restore the demo session. |
 | T27 | Edit a profile email or phone to an invalid value | The profile is not saved and the browser shows a validation message. |
+| T28 | Open a message's delete control and confirm **Delete for me** | Only that message is removed from the local conversation and remains removed after refresh. |
+| T29 | Open chat options and confirm **Clear chat history** | All local messages/files/voice notes are removed; the contact and empty conversation remain. |
+| T30 | Open chat options and confirm **Delete chat** | The conversation disappears from the chat list while the contact remains available in New chat. |
+| T31 | Open chat options and block a contact with a phone number | The displayed number is blocked in the demo; messaging and sharing controls are disabled until unblocked. |
+| T32 | Open the emoji picker, choose another category, then select an emoji after typing text | The emoji is inserted at the current caret without replacing surrounding draft text. |
+| T33 | Cancel a message deletion, history clear, chat deletion, or block confirmation | No messages, conversations, or block settings are changed. |
 | T28 | Add a new chat using a valid name and international phone number | A local contact and empty conversation are created; the phone number appears in the contact details. |
 | T29 | Add a contact with an invalid or duplicate phone number | The form shows an error and does not create a duplicate contact. |
 | T30 | Open AI tools, type a message idea, choose a style, and draft it | An editable local draft is placed in the composer and is not sent automatically. |
